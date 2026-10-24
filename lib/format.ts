@@ -33,7 +33,7 @@ export const EVENT_LABEL: Record<string, string> = {
   added: 'Added',
   watered: 'Watered',
   still_moist: 'Still moist, checked again in 2 days',
-  bone_dry: 'Watered (was bone dry)',
+  bone_dry: 'Marked bone dry: needs water now',
   species_changed: 'Species changed',
   note: 'Note',
 };

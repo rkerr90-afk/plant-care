@@ -72,24 +72,46 @@ export function firstDueDate(profile: CareProfile, plant: PlantContext, today: s
 export type Feedback = 'watered' | 'still_moist' | 'bone_dry';
 
 /**
- * Applies a button press. Still moist = the interval was too short; bone dry = too long.
- * Returns the new feedback factor and next due date, and whether it counts as a watering.
+ * Applies a button press.
+ * - watered: you watered it. Next date follows the schedule.
+ * - still_moist: you checked, soil is damp. Check again in 2 days; the interval was too short.
+ * - bone_dry: you checked, it is very dry. It needs water now (due today) and the interval was too long.
+ * Pressing the same button twice in a row does not nudge the schedule a second time, so tapping
+ * around cannot drift it. Only a bone_dry or still_moist press changes the learned factor.
  */
 export function applyFeedback(
   feedback: Feedback,
   profile: CareProfile,
   plant: PlantContext,
   today: string,
+  opts: { repeat?: boolean } = {},
 ): { feedback_factor: number; next_due_on: string; watered: boolean } {
   let factor = plant.feedback_factor;
-  if (feedback === 'still_moist') factor = clamp(round2(factor * 1.1), FEEDBACK_MIN, FEEDBACK_MAX);
-  if (feedback === 'bone_dry') factor = clamp(round2(factor * 0.9), FEEDBACK_MIN, FEEDBACK_MAX);
+  if (!opts.repeat) {
+    if (feedback === 'still_moist') factor = clamp(round2(factor * 1.1), FEEDBACK_MIN, FEEDBACK_MAX);
+    if (feedback === 'bone_dry') factor = clamp(round2(factor * 0.9), FEEDBACK_MIN, FEEDBACK_MAX);
+  }
 
   if (feedback === 'still_moist') {
     return { feedback_factor: factor, next_due_on: addDays(today, 2), watered: false };
   }
+  if (feedback === 'bone_dry') {
+    return { feedback_factor: factor, next_due_on: today, watered: false };
+  }
   const interval = wateringInterval(profile, { ...plant, feedback_factor: factor }, today);
   return { feedback_factor: factor, next_due_on: addDays(today, interval), watered: true };
+}
+
+/** Forgets what the buttons taught the app and re-plans from the last watering. */
+export function resetSchedule(
+  profile: CareProfile,
+  plant: PlantContext,
+  lastWatered: string | null,
+  today: string,
+): { feedback_factor: number; next_due_on: string } {
+  const from = lastWatered ?? today;
+  const next = addDays(from, wateringInterval(profile, { ...plant, feedback_factor: 1 }, from));
+  return { feedback_factor: 1, next_due_on: next < today ? today : next };
 }
 
 /** Today's date (YYYY-MM-DD) in a given IANA time zone. */

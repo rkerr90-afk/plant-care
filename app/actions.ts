@@ -9,6 +9,7 @@ import {
   todayIn,
   wateringInterval,
   addDays,
+  resetSchedule,
   type Feedback,
   type LastWatered,
   type PlantContext,
@@ -150,7 +151,19 @@ export async function feedbackAction(plantId: string, feedback: Feedback): Promi
     const profile = await getProfile(db, userId);
     const today = todayIn(profile.timezone);
     const plant = await loadPlant(plantId);
-    const r = applyFeedback(feedback, plant.species.profile, contextOf(plant), today);
+    // Same button twice in a row should not nudge the schedule a second time.
+    let repeat = false;
+    if (feedback !== 'watered') {
+      const { data: last } = await db
+        .from('events')
+        .select('kind')
+        .eq('plant_id', plantId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      repeat = last?.kind === feedback;
+    }
+    const r = applyFeedback(feedback, plant.species.profile, contextOf(plant), today, { repeat });
 
     await db
       .from('plants')
@@ -230,6 +243,25 @@ export async function updateContextAction(plantId: string, input: ContextInput):
     revalidatePath('/');
     revalidatePath(`/plants/${plantId}`);
     return { ok: true, data: null };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/** Clears what the buttons taught the app and re-plans from the last watering. */
+export async function resetScheduleAction(plantId: string): Promise<Result<{ next_due_on: string }>> {
+  try {
+    const userId = await requireUser();
+    const db = await userClient();
+    const profile = await getProfile(db, userId);
+    const today = todayIn(profile.timezone);
+    const plant = await loadPlant(plantId);
+    const r = resetSchedule(plant.species.profile, contextOf(plant), plant.last_watered_on, today);
+    const { error } = await db.from('plants').update(r).eq('id', plantId);
+    if (error) throw new Error(error.message);
+    revalidatePath('/');
+    revalidatePath(`/plants/${plantId}`);
+    return { ok: true, data: { next_due_on: r.next_due_on } };
   } catch (err) {
     return fail(err);
   }

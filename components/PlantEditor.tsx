@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { changeSpeciesAction, deletePlantAction, updateContextAction } from '@/app/actions';
+import { changeSpeciesAction, deletePlantAction, resetScheduleAction, updateContextAction } from '@/app/actions';
 import { ContextFields, type ContextState } from './ContextFields';
 
 export function PlantEditor({
@@ -51,6 +51,16 @@ export function PlantEditor({
       </div>
       {saved && <p className="small" style={{ marginTop: 8 }}>Saved. Watering schedule updated.</p>}
       {error && <p className="error">{error}</p>}
+
+      <hr />
+
+      <p className="small">
+        If you tapped the buttons by mistake and the schedule looks wrong, reset it. This forgets “still moist” and
+        “bone dry” taps and plans the next watering from the last time you watered.
+      </p>
+      <button className="block" disabled={pending} onClick={() => run(() => resetScheduleAction(plantId))}>
+        Reset watering schedule
+      </button>
 
       <hr />
 

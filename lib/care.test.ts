@@ -4,6 +4,7 @@ import {
   addDays,
   applyFeedback,
   firstDueDate,
+  resetSchedule,
   todayIn,
   timeIn,
   wateringInterval,
@@ -76,11 +77,30 @@ test('still moist snoozes 2 days and lengthens future intervals', () => {
   assert.deepEqual(r, { feedback_factor: 1.1, next_due_on: '2026-06-12', watered: false });
 });
 
-test('bone dry waters and shortens future intervals', () => {
+test('bone dry marks it due today, is not a watering, and shortens future intervals', () => {
   const r = applyFeedback('bone_dry', pothos, base, '2026-06-10');
-  assert.equal(r.feedback_factor, 0.9);
+  assert.deepEqual(r, { feedback_factor: 0.9, next_due_on: '2026-06-10', watered: false });
+});
+
+test('repeating the same button does not nudge the schedule again', () => {
+  const dry = applyFeedback('bone_dry', pothos, { ...base, feedback_factor: 0.9 }, '2026-06-10', { repeat: true });
+  assert.equal(dry.feedback_factor, 0.9);
+  const moist = applyFeedback('still_moist', pothos, { ...base, feedback_factor: 1.1 }, '2026-06-10', { repeat: true });
+  assert.equal(moist.feedback_factor, 1.1);
+  assert.equal(moist.next_due_on, '2026-06-12');
+});
+
+test('watering after a bone dry flag re-plans from today', () => {
+  const r = applyFeedback('watered', pothos, { ...base, feedback_factor: 0.9 }, '2026-06-10');
   assert.equal(r.watered, true);
   assert.equal(r.next_due_on, '2026-06-16'); // 7 * 0.9 = 6.3 -> 6
+});
+
+test('reset clears learning and re-plans from the last watering', () => {
+  const r = resetSchedule(pothos, { ...base, feedback_factor: 0.53 }, '2026-06-10', '2026-06-12');
+  assert.deepEqual(r, { feedback_factor: 1, next_due_on: '2026-06-17' });
+  const overdue = resetSchedule(pothos, base, '2026-05-01', '2026-06-12');
+  assert.equal(overdue.next_due_on, '2026-06-12');
 });
 
 test('feedback factor is bounded', () => {
