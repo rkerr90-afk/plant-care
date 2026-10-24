@@ -2,10 +2,12 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { currentUserId, userClient } from '@/lib/supabase';
 import { getProfile, latestFlags, PLANT_SELECT, type PlantWithSpecies } from '@/lib/plants';
-import { howToWater, todayIn } from '@/lib/care';
+import { adjustedDue, howToWater, todayIn } from '@/lib/care';
+import { getWeather } from '@/lib/weather';
 import { currentFlag, daysAgo, dueLabel, EVENT_LABEL, LIGHT_LABEL, sentence, shortDate } from '@/lib/format';
 import { signedPhotoUrls } from '@/lib/photos';
 import { FeedbackButtons } from '@/components/FeedbackButtons';
+import { MoveSwitch } from '@/components/MoveSwitch';
 import { PlantEditor } from '@/components/PlantEditor';
 import { StatusChip } from '@/components/StatusChip';
 
@@ -25,7 +27,9 @@ export default async function PlantPage({ params }: { params: Promise<{ id: stri
   const sp = plant.species.profile;
   const photos = await signedPhotoUrls([plant.photo_path]);
   const photo = plant.photo_path ? photos[plant.photo_path] : undefined;
-  const label = dueLabel(plant.next_due_on, today);
+  const weather = plant.setting === 'outdoor' ? await getWeather(profile.latitude, profile.longitude, profile.timezone, today) : null;
+  const adj = adjustedDue(plant, weather, today);
+  const label = dueLabel(adj.date, today);
   const flag = currentFlag((await latestFlags(db, [plant.id]))[plant.id] ?? null, label);
 
   const { data: events } = await db
@@ -49,6 +53,7 @@ export default async function PlantPage({ params }: { params: Promise<{ id: stri
         {plant.last_watered_on && (
           <span className="small">Last watered {shortDate(plant.last_watered_on)} ({daysAgo(plant.last_watered_on, today)})</span>
         )}
+        {adj.note && <div className="small" style={{ marginTop: 6 }}>{adj.note}</div>}
         <div className="how">{sentence(howToWater(sp))} {sentence(sp.soil_check)}</div>
         <FeedbackButtons plantId={plant.id} flag={flag} />
       </div>
@@ -78,6 +83,22 @@ export default async function PlantPage({ params }: { params: Promise<{ id: stri
       </div>
 
       <h2>Details</h2>
+      <div className="card">
+        <MoveSwitch
+          plantId={plant.id}
+          nickname={plant.nickname}
+          context={{
+            setting: plant.setting,
+            spot: plant.spot ?? '',
+            light: plant.light,
+            near_heat: plant.near_heat,
+            exposure: plant.exposure,
+            pot_material: plant.pot_material,
+            has_drainage: plant.has_drainage,
+            pot_size: plant.pot_size,
+          }}
+        />
+      </div>
       <PlantEditor
         plantId={plant.id}
         nickname={plant.nickname}

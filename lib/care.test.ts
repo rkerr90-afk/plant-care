@@ -115,3 +115,81 @@ test('date helpers', () => {
   assert.equal(timeIn('Europe/London', noonUtcSummer), '12:00');
   assert.equal(timeIn('Europe/London', new Date('2026-12-01T12:00:00Z')), '12:00');
 });
+
+// ---------- Phase 2 ----------
+import { adjustedDue, awayPhase, frostRisk, riskScore, type Weather } from './care.ts';
+import { parseWeather } from './weather.ts';
+
+const day = (date: string, rain_mm: number, tmax = 15, tmin = 8) => ({ date, rain_mm, tmax, tmin });
+const outdoor = { setting: 'outdoor' as const, exposure: 'exposed' as const, next_due_on: '2026-10-24', last_watered_on: '2026-10-17' };
+
+test('rain on an exposed pot pushes the check back', () => {
+  const w: Weather = { days: [day('2026-10-22', 0), day('2026-10-23', 8), day('2026-10-24', 2)], lowTonight: 6 };
+  const r = adjustedDue(outdoor, w, '2026-10-24');
+  assert.equal(r.date, '2026-10-26');
+  assert.match(r.note ?? '', /Rain/);
+});
+
+test('rain does not move a sheltered or indoor plant', () => {
+  const w: Weather = { days: [day('2026-10-23', 12), day('2026-10-24', 3)], lowTonight: 6 };
+  assert.equal(adjustedDue({ ...outdoor, exposure: 'sheltered' }, w, '2026-10-24').date, '2026-10-24');
+  assert.equal(adjustedDue({ ...outdoor, setting: 'indoor' }, w, '2026-10-24').date, '2026-10-24');
+});
+
+test('watering after the rain beats the rain', () => {
+  const w: Weather = { days: [day('2026-10-23', 10), day('2026-10-24', 0)], lowTonight: 6 };
+  assert.equal(adjustedDue({ ...outdoor, last_watered_on: '2026-10-24' }, w, '2026-10-24').date, '2026-10-24');
+});
+
+test('light rain is ignored', () => {
+  const w: Weather = { days: [day('2026-10-23', 1.5), day('2026-10-24', 1)], lowTonight: 6 };
+  assert.equal(adjustedDue(outdoor, w, '2026-10-24').date, '2026-10-24');
+});
+
+test('a hot dry spell brings the check forward', () => {
+  const hot: Weather = { days: [day('2026-07-09', 0, 27), day('2026-07-10', 0, 27)], lowTonight: 14 };
+  const p = { ...outdoor, next_due_on: '2026-07-12', last_watered_on: '2026-07-06' };
+  assert.equal(adjustedDue(p, hot, '2026-07-10').date, '2026-07-11');
+  const veryHot: Weather = { days: [day('2026-07-09', 0, 31), day('2026-07-10', 0, 32)], lowTonight: 14 };
+  assert.equal(adjustedDue(p, veryHot, '2026-07-10').date, '2026-07-10');
+});
+
+test('no weather means no change', () => {
+  assert.equal(adjustedDue(outdoor, null, '2026-10-24').date, '2026-10-24');
+});
+
+test('frost risk uses the plant minimum and shelter', () => {
+  const exposed = { setting: 'outdoor' as const, exposure: 'exposed' as const };
+  assert.equal(frostRisk(exposed, 5, 2), true);
+  assert.equal(frostRisk(exposed, -10, 0), false);
+  assert.equal(frostRisk({ ...exposed, exposure: 'sheltered' }, 5, 5), false);
+  assert.equal(frostRisk({ ...exposed, setting: 'indoor' }, 5, -3), false);
+  assert.equal(frostRisk(exposed, 5, null), false);
+});
+
+test('away phases', () => {
+  assert.equal(awayPhase(null, null, '2026-08-01'), 'none');
+  assert.equal(awayPhase('2026-08-10', '2026-08-20', '2026-08-05'), 'upcoming');
+  assert.equal(awayPhase('2026-08-10', '2026-08-20', '2026-07-01'), 'none');
+  assert.equal(awayPhase('2026-08-10', '2026-08-20', '2026-08-15'), 'away');
+  assert.equal(awayPhase('2026-08-10', '2026-08-20', '2026-08-21'), 'returned');
+  assert.equal(awayPhase('2026-08-10', '2026-08-20', '2026-08-30'), 'none');
+});
+
+test('risk grows with days overdue relative to interval', () => {
+  assert.ok(riskScore('2026-08-01', 3, '2026-08-04') > riskScore('2026-08-01', 14, '2026-08-04'));
+  assert.equal(riskScore(null, 7, '2026-08-04'), 0);
+});
+
+test('parses an Open-Meteo response and finds tonight\'s low', () => {
+  const hours: string[] = [];
+  const temps: number[] = [];
+  for (const d of ['2026-10-24', '2026-10-25']) for (let h = 0; h < 24; h++) { hours.push(`${d}T${String(h).padStart(2, '0')}:00`); temps.push(h === 3 && d === '2026-10-25' ? -1 : 9); }
+  const w = parseWeather(
+    { daily: { time: ['2026-10-24', '2026-10-25'], precipitation_sum: [0.2, null], temperature_2m_max: [14, 12], temperature_2m_min: [6, -1] }, hourly: { time: hours, temperature_2m: temps } },
+    '2026-10-24',
+  );
+  assert.equal(w?.lowTonight, -1);
+  assert.equal(w?.days[1].rain_mm, 0);
+  assert.equal(parseWeather({}, '2026-10-24'), null);
+});

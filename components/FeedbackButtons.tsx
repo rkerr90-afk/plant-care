@@ -58,7 +58,7 @@ export function FeedbackButtons({ plantId, flag = null }: { plantId: string; fla
   );
 }
 
-export function WaterAllButton({ count }: { count: number }) {
+export function WaterAllButton({ ids }: { ids: string[] }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   return (
@@ -66,12 +66,12 @@ export function WaterAllButton({ count }: { count: number }) {
       disabled={pending}
       onClick={() =>
         start(async () => {
-          await waterAllDueAction();
+          await waterAllDueAction(ids);
           router.refresh();
         })
       }
     >
-      {pending ? <span className="spinner" /> : `Watered all ${count}`}
+      {pending ? <span className="spinner" /> : `Watered all ${ids.length}`}
     </button>
   );
 }

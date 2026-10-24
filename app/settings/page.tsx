@@ -23,6 +23,8 @@ export default async function SettingsPage() {
         digestTime={String(profile.digest_time).slice(0, 5)}
         everyDays={profile.digest_every_days}
         hasPets={profile.has_pets}
+        awayFrom={profile.away_from ?? ''}
+        awayUntil={profile.away_until ?? ''}
       />
     </>
   );

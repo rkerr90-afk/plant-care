@@ -2,22 +2,16 @@
 
 Photograph a plant, confirm what it is, and get one reminder a day for the plants that need checking. Installable PWA for iPhone. Next.js on DigitalOcean App Platform, Supabase for sign-in, data and photos, Claude for identification and care profiles.
 
-Phase 1 covers: sign-in, photo ID with top 3 confirm, context questions, quick-add, adaptive indoor watering, pet toxicity badges, fixing a wrong ID, push digest, due list, settings, account deletion. Outdoor weather logic, frost alerts, away mode, health check, feeding and the journal come in phases 2 and 3.
+Phase 1 covers: email and password sign-in, photo ID with top 3 confirm, context questions, quick-add, adaptive indoor watering, pet toxicity badges, fixing a wrong ID, push digest, due list, settings, account deletion. Outdoor weather logic, frost alerts, away mode, health check, feeding and the journal come in phases 2 and 3.
 
 ## Setup (about 30 minutes)
 
 ### 1. Supabase
 1. Create a project at supabase.com (free tier is fine). Pick the London region.
 2. **SQL Editor**: paste and run `supabase/schema.sql`.
-3. **Authentication > Emails > Magic Link template**: the app signs in with a 6-digit code, not a link (on iPhone a link would open Safari instead of the installed app). Edit the template body so it contains the code:
-   ```html
-   <h2>Your Plant Care code</h2>
-   <p>Enter this code in the app: <strong>{{ .Token }}</strong></p>
-   ```
-4. **Authentication > Providers > Email**: set the code length to 6 if it is not already.
+3. **Authentication > Sign In / Providers > Email**: switch **Confirm email** OFF. The app signs in with email and password, so no emails are sent and no SMTP setup is needed. (A magic link would open Safari instead of the installed app, which is why there are no links.)
+4. Leave sign-ups enabled so the person you share it with can create their own account. To make it invite-only later, switch sign-ups off and add users by hand under Authentication > Users.
 5. **Project Settings > API**: copy the Project URL, the `anon` key and the `service_role` key.
-
-Supabase's built-in email sender is rate-limited (a few emails an hour). That is fine for two people. If sign-in emails stop arriving, add custom SMTP under Authentication > SMTP.
 
 ### 2. Other keys
 - **Anthropic**: create an API key at console.anthropic.com.
@@ -39,7 +33,7 @@ Create a private repo and push this folder to it. `.env` files are git-ignored.
 3. The job runs on the hour. A reminder set for 12:00 arrives at 12:00; one set for 12:30 arrives at 13:00.
 
 ### 6. Install on iPhone
-1. Open the app URL in **Safari**, sign in with your email and code.
+1. Open the app URL in **Safari** and create your account with an email and password.
 2. Share button, **Add to Home Screen**, then open Plants from the home screen.
 3. Tap **Turn on reminders** and allow notifications. Settings has a **Send test notification** button.
 4. Set your postcode and tick "I have pets" in Settings.

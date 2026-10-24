@@ -7,6 +7,7 @@ create table public.profiles (
   latitude double precision,
   longitude double precision,
   digest_time time not null default '12:00',
+  digest_every_days integer not null default 1 check (digest_every_days between 1 and 14),
   timezone text not null default 'Europe/London',
   has_pets boolean not null default false,
   last_digest_on date,

@@ -9,7 +9,16 @@ function configure() {
   configured = true;
 }
 
-export type PushPayload = { title: string; body: string; url?: string; tag?: string };
+export type PushPayload = {
+  title: string;
+  body: string;
+  url?: string;
+  tag?: string;
+  /** Plants this notification is about, so action buttons can act on them. */
+  ids?: string[];
+  /** Action buttons. Android and desktop show them; iPhone currently ignores them. */
+  actions?: { action: 'water' | 'snooze'; title: string }[];
+};
 
 /** Sends to every device the user enabled. Drops subscriptions the push service says are gone. */
 export async function sendToUser(userId: string, payload: PushPayload): Promise<number> {

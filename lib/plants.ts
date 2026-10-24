@@ -14,6 +14,9 @@ export type Profile = {
   timezone: string;
   has_pets: boolean;
   last_digest_on: string | null;
+  away_from: string | null;
+  away_until: string | null;
+  last_frost_on: string | null;
   ai_calls_on: string | null;
   ai_calls_today: number;
 };

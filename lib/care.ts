@@ -117,6 +117,82 @@ export function resetSchedule(
   return { feedback_factor: 1, next_due_on: next < today ? today : next };
 }
 
+// ---------- Weather (outdoor plants) ----------
+
+export type DayWeather = { date: string; rain_mm: number; tmax: number; tmin: number };
+/** Recent and forecast days, plus the forecast low between this evening and tomorrow morning. */
+export type Weather = { days: DayWeather[]; lowTonight: number | null };
+
+export const RAIN_SKIP_MM = 5; // this much rain over 48 hours counts as a watering
+export const HOT_C = 25;
+export const VERY_HOT_C = 30;
+
+type WeatherPlant = {
+  setting: 'indoor' | 'outdoor';
+  exposure: 'exposed' | 'sheltered' | null;
+  next_due_on: string | null;
+  last_watered_on: string | null;
+};
+
+/**
+ * The due date after weather. Only outdoor plants change.
+ * - Rain: if the pot is exposed and 5 mm or more fell in the last 48 hours (today included), nature did the
+ *   watering. The check moves to two days after the last rain, unless you watered since.
+ * - Heat: after two days of 25 C or more with almost no rain, the check comes a day sooner (two at 30 C).
+ */
+export function adjustedDue(plant: WeatherPlant, weather: Weather | null, today: string): { date: string | null; note: string | null } {
+  const due = plant.next_due_on;
+  if (!due || plant.setting !== 'outdoor' || !weather) return { date: due, note: null };
+
+  const recent = weather.days.filter((d) => d.date >= addDays(today, -2) && d.date <= today);
+  const rainTotal = recent.reduce((n, d) => n + d.rain_mm, 0);
+
+  if (plant.exposure !== 'sheltered' && rainTotal >= RAIN_SKIP_MM) {
+    const wet = recent.filter((d) => d.rain_mm >= 1).map((d) => d.date);
+    const lastRain = wet[wet.length - 1];
+    const watered = plant.last_watered_on && lastRain && plant.last_watered_on >= lastRain;
+    if (lastRain && !watered) {
+      const candidate = addDays(lastRain, 2);
+      if (candidate > due) return { date: candidate, note: `Rain: about ${Math.round(rainTotal)} mm in the last two days` };
+      return { date: due, note: null };
+    }
+  }
+
+  const todayW = recent.find((d) => d.date === today);
+  const yest = recent.find((d) => d.date === addDays(today, -1));
+  if (todayW && yest && todayW.tmax >= HOT_C && yest.tmax >= HOT_C && rainTotal < 2) {
+    const sooner = addDays(due, todayW.tmax >= VERY_HOT_C ? -2 : -1);
+    const date = sooner < today ? (due < today ? due : today) : sooner;
+    if (date < due) return { date, note: 'Hot, dry spell: checking sooner' };
+  }
+  return { date: due, note: null };
+}
+
+/** True when tonight's forecast low is too cold for an outdoor plant. */
+export function frostRisk(plant: { setting: 'indoor' | 'outdoor'; exposure: 'exposed' | 'sheltered' | null }, minTempC: number, lowTonight: number | null): boolean {
+  if (plant.setting !== 'outdoor' || lowTonight === null || !Number.isFinite(minTempC)) return false;
+  const margin = plant.exposure === 'sheltered' ? -1 : 1;
+  return lowTonight <= minTempC + margin;
+}
+
+// ---------- Away mode ----------
+
+export type AwayPhase = 'none' | 'upcoming' | 'away' | 'returned';
+
+/** upcoming = leaving within a week; away = between the dates; returned = the 3 days after you are back. */
+export function awayPhase(from: string | null, until: string | null, today: string): AwayPhase {
+  if (!from || !until) return 'none';
+  if (today < from) return daysBetween(today, from) <= 7 ? 'upcoming' : 'none';
+  if (today <= until) return 'away';
+  return daysBetween(until, today) <= 3 ? 'returned' : 'none';
+}
+
+/** How badly a plant is hurting: days overdue as a share of its normal interval. Bigger is worse. */
+export function riskScore(nextDue: string | null, intervalDays: number, today: string): number {
+  if (!nextDue) return 0;
+  return daysBetween(nextDue, today) / Math.max(1, intervalDays);
+}
+
 /** Today's date (YYYY-MM-DD) in a given IANA time zone. */
 export function todayIn(timeZone: string, now: Date = new Date()): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);

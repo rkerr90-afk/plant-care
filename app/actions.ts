@@ -182,19 +182,29 @@ export async function feedbackAction(plantId: string, feedback: Feedback): Promi
   }
 }
 
-/** Marks every plant due today or earlier as watered. */
-export async function waterAllDueAction(): Promise<Result<{ count: number }>> {
+/** Marks the given plants (the ones due today, as the screen sees them) as watered. */
+export async function waterAllDueAction(ids: string[]): Promise<Result<{ count: number }>> {
+  try {
+    await requireUser();
+    for (const id of ids) await feedbackAction(id, 'watered');
+    return { ok: true, data: { count: ids.length } };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/** Pushes the given plants' next check to tomorrow. */
+export async function snoozeAction(ids: string[]): Promise<Result<{ count: number }>> {
   try {
     const userId = await requireUser();
     const db = await userClient();
     const profile = await getProfile(db, userId);
-    const today = todayIn(profile.timezone);
-    const { data } = await db
-      .from('plants')
-      .select('id')
-      .eq('status', 'active')
-      .lte('next_due_on', today);
-    for (const p of data ?? []) await feedbackAction(p.id, 'watered');
+    const tomorrow = addDays(todayIn(profile.timezone), 1);
+    const { data } = await db.from('plants').update({ next_due_on: tomorrow }).in('id', ids).eq('user_id', userId).select('id');
+    for (const p of data ?? []) {
+      await db.from('events').insert({ plant_id: p.id, user_id: userId, kind: 'note', detail: 'Snoozed until tomorrow' });
+    }
+    revalidatePath('/');
     return { ok: true, data: { count: data?.length ?? 0 } };
   } catch (err) {
     return fail(err);
@@ -240,6 +250,43 @@ export async function updateContextAction(plantId: string, input: ContextInput):
     }
     const { error } = await db.from('plants').update({ ...updated, next_due_on }).eq('id', plantId);
     if (error) throw new Error(error.message);
+    revalidatePath('/');
+    revalidatePath(`/plants/${plantId}`);
+    return { ok: true, data: null };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/** One-tap move between indoors and outdoors. Forgets what the buttons taught, because the conditions changed. */
+export async function movePlantAction(plantId: string, input: ContextInput): Promise<Result<null>> {
+  try {
+    const userId = await requireUser();
+    const db = await userClient();
+    const profile = await getProfile(db, userId);
+    const today = todayIn(profile.timezone);
+    const plant = await loadPlant(plantId);
+    const updated = {
+      setting: input.setting,
+      spot: input.spot.trim() || null,
+      light: input.light,
+      near_heat: input.setting === 'indoor' && input.near_heat,
+      exposure: input.setting === 'outdoor' ? input.exposure ?? 'exposed' : null,
+      feedback_factor: 1,
+      needs_context: false,
+    };
+    const ctx = contextOf({ ...plant, ...updated });
+    const from = plant.last_watered_on ?? today;
+    let next_due_on = addDays(from, wateringInterval(plant.species.profile, ctx, from));
+    if (next_due_on < today) next_due_on = today;
+    const { error } = await db.from('plants').update({ ...updated, next_due_on }).eq('id', plantId);
+    if (error) throw new Error(error.message);
+    await db.from('events').insert({
+      plant_id: plantId,
+      user_id: userId,
+      kind: 'note',
+      detail: input.setting === 'indoor' ? 'Moved indoors' : 'Moved outside',
+    });
     revalidatePath('/');
     revalidatePath(`/plants/${plantId}`);
     return { ok: true, data: null };
@@ -352,6 +399,24 @@ export async function saveSettingsAction(input: SettingsInput): Promise<Result<{
     revalidatePath('/');
     revalidatePath('/settings');
     return { ok: true, data: { postcode: postcode ?? '' } };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+// ---------- Away mode ----------
+
+export async function saveAwayAction(from: string | null, until: string | null): Promise<Result<null>> {
+  try {
+    const userId = await requireUser();
+    const db = await userClient();
+    if ((from && !until) || (!from && until)) throw new Error('Pick both a leaving date and a return date');
+    if (from && until && until < from) throw new Error('The return date is before the leaving date');
+    const { error } = await db.from('profiles').update({ away_from: from || null, away_until: until || null }).eq('id', userId);
+    if (error) throw new Error(error.message);
+    revalidatePath('/');
+    revalidatePath('/settings');
+    return { ok: true, data: null };
   } catch (err) {
     return fail(err);
   }

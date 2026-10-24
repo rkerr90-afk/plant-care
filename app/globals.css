@@ -108,7 +108,7 @@ button:disabled { opacity: 0.5; cursor: default; }
 .error { color: var(--due); font-size: 14px; margin-top: 8px; }
 
 label { display: block; font-weight: 600; font-size: 14px; margin: 16px 0 6px; }
-input[type='text'], input[type='email'], input[type='time'], input:not([type]), select, textarea {
+input[type='text'], input[type='email'], input[type='time'], input[type='date'], input:not([type]), select, textarea {
   width: 100%; font: 16px var(--sans); padding: 12px; border-radius: 12px;
   border: 1px solid var(--line); background: var(--card); color: var(--ink);
 }
