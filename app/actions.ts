@@ -445,7 +445,7 @@ export async function sendTestPushAction(): Promise<Result<{ sent: number }>> {
     const userId = await requireUser();
     const { sendToUser } = await import('@/lib/push');
     const sent = await sendToUser(userId, {
-      title: 'Plant Care',
+      title: 'Grow 🍃',
       body: 'Notifications are working. Your digest will arrive at your chosen time.',
       url: '/',
       tag: 'test',

@@ -29,8 +29,7 @@ export default function LoginPage() {
 
   return (
     <div style={{ paddingTop: '12vh' }}>
-      <div style={{ fontSize: 44 }}>🌿</div>
-      <h1>Plant Care</h1>
+      <h1>Grow 🍃</h1>
       <p className="sub">Photograph your plants. Get one reminder a day for the ones that need you.</p>
 
       <form onSubmit={submit}>

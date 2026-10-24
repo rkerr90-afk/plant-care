@@ -3,14 +3,14 @@ import { RegisterSW } from '@/components/RegisterSW';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Plant Care',
+  title: 'Grow 🍃',
   description: 'Identify your plants and get a daily reminder of what needs watering.',
   manifest: '/manifest.webmanifest',
   icons: {
     icon: '/icons/favicon-48.png',
     apple: '/icons/apple-touch-icon.png',
   },
-  appleWebApp: { capable: true, title: 'Plants', statusBarStyle: 'default' },
+  appleWebApp: { capable: true, title: 'Grow 🍃', statusBarStyle: 'default' },
 };
 
 export const viewport: Viewport = {

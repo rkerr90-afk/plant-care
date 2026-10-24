@@ -4,7 +4,7 @@ self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
 
 self.addEventListener('push', (event) => {
-  let data = { title: 'Plant Care', body: 'You have plants to check today.', url: '/' };
+  let data = { title: 'Grow 🍃', body: 'You have plants to check today.', url: '/' };
   try {
     if (event.data) data = { ...data, ...event.data.json() };
   } catch {
@@ -31,7 +31,7 @@ async function runAction(action, ids) {
       body: JSON.stringify({ action, ids }),
     });
     if (!res.ok || res.redirected) return false;
-    await self.registration.showNotification('Plant Care', {
+    await self.registration.showNotification('Grow 🍃', {
       body: action === 'water' ? 'Marked as watered.' : 'Snoozed until tomorrow.',
       tag: 'action-result',
       icon: '/icons/icon-192.png',
