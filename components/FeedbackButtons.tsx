@@ -3,9 +3,9 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { feedbackAction, waterAllDueAction } from '@/app/actions';
-import type { Feedback } from '@/lib/care';
+import type { Feedback, Flag } from '@/lib/care';
 
-export function FeedbackButtons({ plantId }: { plantId: string }) {
+export function FeedbackButtons({ plantId, flag = null }: { plantId: string; flag?: Flag }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [which, setWhich] = useState<Feedback | null>(null);
@@ -27,12 +27,24 @@ export function FeedbackButtons({ plantId }: { plantId: string }) {
     <>
       <div className="actions">
         <button className="primary grow" disabled={pending} onClick={() => press('watered')}>
-          {label('watered', 'Watered')}
+          {label('watered', 'I watered it')}
         </button>
-        <button disabled={pending} onClick={() => press('still_moist')} title="Soil still damp: check again in 2 days">
+        <button
+          className={flag === 'still_moist' ? 'flagged-moist' : ''}
+          aria-pressed={flag === 'still_moist'}
+          disabled={pending}
+          onClick={() => press('still_moist')}
+          title="Soil still damp: check again in 2 days"
+        >
           {label('still_moist', 'Still moist')}
         </button>
-        <button disabled={pending} onClick={() => press('bone_dry')} title="Watered, and it was very dry">
+        <button
+          className={flag === 'bone_dry' ? 'flagged-dry' : ''}
+          aria-pressed={flag === 'bone_dry'}
+          disabled={pending}
+          onClick={() => press('bone_dry')}
+          title="Soil is very dry: needs water now"
+        >
           {label('bone_dry', 'Bone dry')}
         </button>
       </div>

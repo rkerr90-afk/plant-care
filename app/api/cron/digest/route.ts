@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { adminClient, env } from '@/lib/supabase';
 import { sendToUser } from '@/lib/push';
-import { timeIn, todayIn } from '@/lib/care';
+import { daysBetween, timeIn, todayIn } from '@/lib/care';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,7 +14,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'unauthorised' }, { status: 401 });
   }
   const db = adminClient();
-  const { data: profiles, error } = await db.from('profiles').select('id, timezone, digest_time, last_digest_on');
+  const { data: profiles, error } = await db.from('profiles').select('id, timezone, digest_time, digest_every_days, last_digest_on');
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const now = new Date();
@@ -23,6 +23,8 @@ export async function POST(req: Request) {
   for (const p of profiles ?? []) {
     const today = todayIn(p.timezone, now);
     if (p.last_digest_on === today) continue;
+    // Not yet N days since the last reminder.
+    if (p.last_digest_on && daysBetween(p.last_digest_on, today) < (p.digest_every_days ?? 1)) continue;
     if (timeIn(p.timezone, now) < String(p.digest_time).slice(0, 5)) continue;
 
     const { data: due } = await db

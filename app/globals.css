@@ -142,3 +142,7 @@ input[type='text'], input[type='email'], input[type='time'], input:not([type]), 
 .back { display: inline-block; margin-bottom: 12px; text-decoration: none; font-size: 15px; }
 .row { display: flex; gap: 8px; }
 hr { border: 0; border-top: 1px solid var(--line); margin: 24px 0; }
+
+/* A plant's flagged check: shows what you found, until you water it. */
+.flagged-dry { background: var(--due-soft); border-color: var(--due); color: var(--due); }
+.flagged-moist { background: var(--green-soft); border-color: var(--green); color: var(--green); }

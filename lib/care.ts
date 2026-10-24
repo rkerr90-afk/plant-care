@@ -71,6 +71,9 @@ export function firstDueDate(profile: CareProfile, plant: PlantContext, today: s
 
 export type Feedback = 'watered' | 'still_moist' | 'bone_dry';
 
+/** What the user last found when checking a plant. null = nothing flagged. */
+export type Flag = 'bone_dry' | 'still_moist' | null;
+
 /**
  * Applies a button press.
  * - watered: you watered it. Next date follows the schedule.

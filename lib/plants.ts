@@ -2,7 +2,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { careProfileFor } from './claude';
 import { adminClient } from './supabase';
-import { todayIn, type CareProfile, type PlantContext } from './care';
+import { todayIn, type CareProfile, type Flag, type PlantContext } from './care';
 
 export type Profile = {
   id: string;
@@ -10,6 +10,7 @@ export type Profile = {
   latitude: number | null;
   longitude: number | null;
   digest_time: string;
+  digest_every_days: number;
   timezone: string;
   has_pets: boolean;
   last_digest_on: string | null;
@@ -44,6 +45,24 @@ export type PlantWithSpecies = Plant & {
 };
 
 export const PLANT_SELECT = '*, species:species_profiles(common_name, scientific_name, profile)';
+
+/** Latest check per plant: bone dry and still moist flag it; watering or a reset clears it. */
+export async function latestFlags(db: SupabaseClient, plantIds: string[]): Promise<Record<string, Flag>> {
+  if (plantIds.length === 0) return {};
+  const { data } = await db
+    .from('events')
+    .select('plant_id, kind')
+    .in('plant_id', plantIds)
+    .in('kind', ['watered', 'still_moist', 'bone_dry', 'note'])
+    .order('created_at', { ascending: false })
+    .limit(1000);
+  const out: Record<string, Flag> = {};
+  for (const e of data ?? []) {
+    if (e.plant_id in out) continue;
+    out[e.plant_id] = e.kind === 'bone_dry' ? 'bone_dry' : e.kind === 'still_moist' ? 'still_moist' : null;
+  }
+  return out;
+}
 
 export function contextOf(p: Plant): PlantContext {
   return {

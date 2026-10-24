@@ -1,12 +1,13 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { currentUserId, userClient } from '@/lib/supabase';
-import { getProfile, PLANT_SELECT, type PlantWithSpecies } from '@/lib/plants';
+import { getProfile, latestFlags, PLANT_SELECT, type PlantWithSpecies } from '@/lib/plants';
 import { howToWater, todayIn } from '@/lib/care';
-import { dueLabel, EVENT_LABEL, LIGHT_LABEL, sentence, shortDate } from '@/lib/format';
+import { daysAgo, dueLabel, EVENT_LABEL, LIGHT_LABEL, sentence, shortDate } from '@/lib/format';
 import { signedPhotoUrls } from '@/lib/photos';
 import { FeedbackButtons } from '@/components/FeedbackButtons';
 import { PlantEditor } from '@/components/PlantEditor';
+import { StatusChip } from '@/components/StatusChip';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,6 +26,7 @@ export default async function PlantPage({ params }: { params: Promise<{ id: stri
   const photos = await signedPhotoUrls([plant.photo_path]);
   const photo = plant.photo_path ? photos[plant.photo_path] : undefined;
   const label = dueLabel(plant.next_due_on, today);
+  const flag = (await latestFlags(db, [plant.id]))[plant.id] ?? null;
 
   const { data: events } = await db
     .from('events')
@@ -43,10 +45,12 @@ export default async function PlantPage({ params }: { params: Promise<{ id: stri
       </p>
 
       <div className="card">
-        <span className={`chip ${label.due ? 'due' : ''}`}>{label.text}</span>
-        {plant.last_watered_on && <span className="small">Last watered {shortDate(plant.last_watered_on)}</span>}
+        <StatusChip flag={flag} label={label} />
+        {plant.last_watered_on && (
+          <span className="small">Last watered {shortDate(plant.last_watered_on)} ({daysAgo(plant.last_watered_on, today)})</span>
+        )}
         <div className="how">{sentence(howToWater(sp))} {sentence(sp.soil_check)}</div>
-        <FeedbackButtons plantId={plant.id} />
+        <FeedbackButtons plantId={plant.id} flag={flag} />
       </div>
 
       {sp.toxic_to_pets && (
@@ -95,7 +99,7 @@ export default async function PlantPage({ params }: { params: Promise<{ id: stri
         <ul className="history">
           {(events ?? []).map((e) => (
             <li key={e.id}>
-              <span>{e.detail && e.kind === 'species_changed' ? `Species: ${e.detail}` : EVENT_LABEL[e.kind] ?? e.kind}</span>
+              <span>{e.detail && e.kind === 'species_changed' ? `Species: ${e.detail}` : e.kind === 'note' && e.detail ? e.detail : EVENT_LABEL[e.kind] ?? e.kind}</span>
               <span>{shortDate(e.created_at.slice(0, 10))}</span>
             </li>
           ))}

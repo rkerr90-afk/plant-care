@@ -259,6 +259,7 @@ export async function resetScheduleAction(plantId: string): Promise<Result<{ nex
     const r = resetSchedule(plant.species.profile, contextOf(plant), plant.last_watered_on, today);
     const { error } = await db.from('plants').update(r).eq('id', plantId);
     if (error) throw new Error(error.message);
+    await db.from('events').insert({ plant_id: plantId, user_id: userId, kind: 'note', detail: 'Schedule reset' });
     revalidatePath('/');
     revalidatePath(`/plants/${plantId}`);
     return { ok: true, data: { next_due_on: r.next_due_on } };
@@ -320,7 +321,7 @@ export async function deletePlantAction(plantId: string): Promise<Result<null>> 
 
 // ---------- Settings ----------
 
-export type SettingsInput = { postcode: string; digest_time: string; has_pets: boolean };
+export type SettingsInput = { postcode: string; digest_time: string; digest_every_days: number; has_pets: boolean };
 
 export async function saveSettingsAction(input: SettingsInput): Promise<Result<{ postcode: string }>> {
   try {
@@ -340,10 +341,12 @@ export async function saveSettingsAction(input: SettingsInput): Promise<Result<{
       longitude = json.result.longitude;
     }
     if (!/^\d{2}:\d{2}$/.test(input.digest_time)) throw new Error('Pick a digest time');
+    const every = Math.round(Number(input.digest_every_days));
+    if (!(every >= 1 && every <= 14)) throw new Error('Pick how often you want reminders');
 
     const { error } = await db
       .from('profiles')
-      .update({ postcode, latitude, longitude, digest_time: input.digest_time, has_pets: input.has_pets })
+      .update({ postcode, latitude, longitude, digest_time: input.digest_time, digest_every_days: every, has_pets: input.has_pets })
       .eq('id', userId);
     if (error) throw new Error(error.message);
     revalidatePath('/');

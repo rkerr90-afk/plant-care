@@ -10,6 +10,11 @@ export function dueLabel(nextDue: string | null, today: string): { text: string;
   return { text: `${shortDate(nextDue)}`, overdue: false, due: false };
 }
 
+export function daysAgo(from: string, today: string): string {
+  const d = daysBetween(from, today);
+  return d <= 0 ? 'today' : d === 1 ? 'yesterday' : `${d} days ago`;
+}
+
 export function shortDate(iso: string): string {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   return `${Number(iso.slice(8, 10))} ${months[Number(iso.slice(5, 7)) - 1]}`;

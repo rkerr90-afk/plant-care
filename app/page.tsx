@@ -1,12 +1,13 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { currentUserId, userClient } from '@/lib/supabase';
-import { getProfile, PLANT_SELECT, type PlantWithSpecies } from '@/lib/plants';
-import { todayIn, howToWater } from '@/lib/care';
+import { getProfile, latestFlags, PLANT_SELECT, type PlantWithSpecies } from '@/lib/plants';
+import { todayIn, howToWater, type Flag } from '@/lib/care';
 import { dueLabel, sentence } from '@/lib/format';
 import { signedPhotoUrls } from '@/lib/photos';
 import { FeedbackButtons, WaterAllButton } from '@/components/FeedbackButtons';
 import { NotifyBanner } from '@/components/NotifyBanner';
+import { StatusChip } from '@/components/StatusChip';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,6 +25,7 @@ export default async function Home() {
     .order('next_due_on', { ascending: true, nullsFirst: false });
   const plants = (data ?? []) as PlantWithSpecies[];
   const photos = await signedPhotoUrls(plants.map((p) => p.photo_path));
+  const flags = await latestFlags(db, plants.map((p) => p.id));
 
   const due = plants.filter((p) => p.next_due_on && p.next_due_on <= today);
   const later = plants.filter((p) => !(p.next_due_on && p.next_due_on <= today));
@@ -63,7 +65,7 @@ export default async function Home() {
             {due.length > 1 && <WaterAllButton count={due.length} />}
           </div>
           {due.map((p) => (
-            <PlantCard key={p.id} plant={p} today={today} photo={photos[p.photo_path ?? '']} pets={profile.has_pets} showActions />
+            <PlantCard key={p.id} plant={p} today={today} photo={photos[p.photo_path ?? '']} pets={profile.has_pets} flag={flags[p.id] ?? null} showActions />
           ))}
         </>
       )}
@@ -72,7 +74,7 @@ export default async function Home() {
         <>
           <h2>Coming up</h2>
           {later.map((p) => (
-            <PlantCard key={p.id} plant={p} today={today} photo={photos[p.photo_path ?? '']} pets={profile.has_pets} />
+            <PlantCard key={p.id} plant={p} today={today} photo={photos[p.photo_path ?? '']} pets={profile.has_pets} flag={flags[p.id] ?? null} />
           ))}
         </>
       )}
@@ -87,12 +89,14 @@ function PlantCard({
   today,
   photo,
   pets,
+  flag,
   showActions = false,
 }: {
   plant: PlantWithSpecies;
   today: string;
   photo?: string;
   pets: boolean;
+  flag: Flag;
   showActions?: boolean;
 }) {
   const label = dueLabel(plant.next_due_on, today);
@@ -108,14 +112,14 @@ function PlantCard({
             {plant.setting === 'outdoor' ? ' · outdoor' : plant.spot ? ` · ${plant.spot}` : ''}
           </div>
           <div style={{ marginTop: 6 }}>
-            <span className={`chip ${label.due ? 'due' : ''}`}>{label.text}</span>
+            <StatusChip flag={flag} label={label} />
             {pets && profile.toxic_to_pets && <span className="chip warn">Toxic to pets</span>}
             {plant.needs_context && <span className="chip warn">Finish setup</span>}
           </div>
           {showActions && <div className="how">{sentence(howToWater(profile))} {sentence(profile.soil_check)}</div>}
         </div>
       </Link>
-      {showActions && <FeedbackButtons plantId={plant.id} />}
+      {showActions && <FeedbackButtons plantId={plant.id} flag={flag} />}
     </div>
   );
 }

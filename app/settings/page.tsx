@@ -21,6 +21,7 @@ export default async function SettingsPage() {
       <SettingsForm
         postcode={profile.postcode ?? ''}
         digestTime={String(profile.digest_time).slice(0, 5)}
+        everyDays={profile.digest_every_days}
         hasPets={profile.has_pets}
       />
     </>
