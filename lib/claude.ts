@@ -19,7 +19,10 @@ export type Candidate = {
 
 export type Identification = { is_plant: boolean; candidates: Candidate[] };
 
-/** Calls Claude with a single forced tool so the answer comes back as structured JSON. */
+/**
+ * Calls Claude with a single tool so the answer comes back as structured JSON. Some models reject a
+ * forced tool_choice, so we leave it on auto and instruct the model to call the tool instead.
+ */
 async function structured<T>(opts: {
   system: string;
   content: Anthropic.MessageParam['content'];
@@ -28,10 +31,10 @@ async function structured<T>(opts: {
 }): Promise<T> {
   const res = await anthropic().messages.create({
     model: model(),
-    max_tokens: opts.maxTokens ?? 1500,
-    system: opts.system,
+    max_tokens: opts.maxTokens ?? 4096,
+    system: `${opts.system}\n\nRespond only by calling the ${opts.tool.name} tool. Do not write any other text.`,
     tools: [opts.tool],
-    tool_choice: { type: 'tool', name: opts.tool.name },
+    tool_choice: { type: 'auto' },
     messages: [{ role: 'user', content: opts.content }],
   });
   const block = res.content.find((b) => b.type === 'tool_use');
@@ -85,7 +88,6 @@ export async function careProfileFor(scientificName: string, commonName: string)
       'underwatering. The base interval assumes active growth, a plastic pot of average size with drainage, ' +
       'and medium indirect light; the app adjusts it for light, pot, heating and season.',
     content: [{ type: 'text', text: `Care profile for ${commonName} (${scientificName}).` }],
-    maxTokens: 1200,
     tool: {
       name: 'care_profile',
       description: 'Return the care profile.',
