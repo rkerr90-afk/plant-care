@@ -25,12 +25,17 @@ export function FeedbackButtons({ plantId, flag = null }: { plantId: string; fla
 
   return (
     <>
-      <div className="actions">
-        <button className="primary grow" disabled={pending} onClick={() => press('watered')}>
+      <div className="actions" role="group" aria-label="What did you find?">
+        <button
+          className={`grow choice ${flag === 'watered' ? 'on-watered' : ''}`}
+          aria-pressed={flag === 'watered'}
+          disabled={pending}
+          onClick={() => press('watered')}
+        >
           {label('watered', 'I watered it')}
         </button>
         <button
-          className={flag === 'still_moist' ? 'flagged-moist' : ''}
+          className={`grow choice ${flag === 'still_moist' ? 'on-moist' : ''}`}
           aria-pressed={flag === 'still_moist'}
           disabled={pending}
           onClick={() => press('still_moist')}
@@ -39,7 +44,7 @@ export function FeedbackButtons({ plantId, flag = null }: { plantId: string; fla
           {label('still_moist', 'Still moist')}
         </button>
         <button
-          className={flag === 'bone_dry' ? 'flagged-dry' : ''}
+          className={`grow choice ${flag === 'bone_dry' ? 'on-dry' : ''}`}
           aria-pressed={flag === 'bone_dry'}
           disabled={pending}
           onClick={() => press('bone_dry')}

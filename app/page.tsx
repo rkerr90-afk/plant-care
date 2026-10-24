@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { currentUserId, userClient } from '@/lib/supabase';
 import { getProfile, latestFlags, PLANT_SELECT, type PlantWithSpecies } from '@/lib/plants';
 import { todayIn, howToWater, type Flag } from '@/lib/care';
-import { dueLabel, sentence } from '@/lib/format';
+import { currentFlag, dueLabel, sentence } from '@/lib/format';
 import { signedPhotoUrls } from '@/lib/photos';
 import { FeedbackButtons, WaterAllButton } from '@/components/FeedbackButtons';
 import { NotifyBanner } from '@/components/NotifyBanner';
@@ -100,6 +100,7 @@ function PlantCard({
   showActions?: boolean;
 }) {
   const label = dueLabel(plant.next_due_on, today);
+  const shown = currentFlag(flag, label);
   const profile = plant.species.profile;
   return (
     <div className="card">
@@ -112,14 +113,14 @@ function PlantCard({
             {plant.setting === 'outdoor' ? ' · outdoor' : plant.spot ? ` · ${plant.spot}` : ''}
           </div>
           <div style={{ marginTop: 6 }}>
-            <StatusChip flag={flag} label={label} />
+            <StatusChip flag={shown} label={label} />
             {pets && profile.toxic_to_pets && <span className="chip warn">Toxic to pets</span>}
             {plant.needs_context && <span className="chip warn">Finish setup</span>}
           </div>
           {showActions && <div className="how">{sentence(howToWater(profile))} {sentence(profile.soil_check)}</div>}
         </div>
       </Link>
-      {showActions && <FeedbackButtons plantId={plant.id} flag={flag} />}
+      {showActions && <FeedbackButtons plantId={plant.id} flag={shown} />}
     </div>
   );
 }

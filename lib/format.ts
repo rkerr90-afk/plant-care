@@ -1,4 +1,4 @@
-import { daysBetween } from './care';
+import { daysBetween, type Flag } from './care';
 
 export function dueLabel(nextDue: string | null, today: string): { text: string; overdue: boolean; due: boolean } {
   if (!nextDue) return { text: 'Not scheduled', overdue: false, due: false };
@@ -8,6 +8,15 @@ export function dueLabel(nextDue: string | null, today: string): { text: string;
   if (d === 1) return { text: 'Tomorrow', overdue: false, due: false };
   if (d < 7) return { text: `In ${d} days`, overdue: false, due: false };
   return { text: `${shortDate(nextDue)}`, overdue: false, due: false };
+}
+
+/**
+ * The answer to show as selected. Bone dry stays until you water. "Watered" and "still moist" lapse
+ * once the plant is due again, so the buttons never claim something that is no longer true.
+ */
+export function currentFlag(flag: Flag, label: { due: boolean }): Flag {
+  if ((flag === 'watered' || flag === 'still_moist') && label.due) return null;
+  return flag;
 }
 
 export function daysAgo(from: string, today: string): string {

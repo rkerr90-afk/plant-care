@@ -46,7 +46,7 @@ export type PlantWithSpecies = Plant & {
 
 export const PLANT_SELECT = '*, species:species_profiles(common_name, scientific_name, profile)';
 
-/** Latest check per plant: bone dry and still moist flag it; watering or a reset clears it. */
+/** Latest answer per plant (watered, still moist or bone dry). A reset clears it. */
 export async function latestFlags(db: SupabaseClient, plantIds: string[]): Promise<Record<string, Flag>> {
   if (plantIds.length === 0) return {};
   const { data } = await db
@@ -59,7 +59,7 @@ export async function latestFlags(db: SupabaseClient, plantIds: string[]): Promi
   const out: Record<string, Flag> = {};
   for (const e of data ?? []) {
     if (e.plant_id in out) continue;
-    out[e.plant_id] = e.kind === 'bone_dry' ? 'bone_dry' : e.kind === 'still_moist' ? 'still_moist' : null;
+    out[e.plant_id] = e.kind === 'watered' || e.kind === 'bone_dry' || e.kind === 'still_moist' ? e.kind : null;
   }
   return out;
 }

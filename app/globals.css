@@ -143,6 +143,9 @@ input[type='text'], input[type='email'], input[type='time'], input:not([type]), 
 .row { display: flex; gap: 8px; }
 hr { border: 0; border-top: 1px solid var(--line); margin: 24px 0; }
 
-/* A plant's flagged check: shows what you found, until you water it. */
-.flagged-dry { background: var(--due-soft); border-color: var(--due); color: var(--due); }
-.flagged-moist { background: var(--green-soft); border-color: var(--green); color: var(--green); }
+/* Three linked choices. At most one is selected; none is highlighted by default. */
+.choice { padding: 11px 8px; font-weight: 500; }
+.choice[aria-pressed='true'] { font-weight: 700; }
+.on-watered { background: var(--green); border-color: var(--green); color: var(--paper); }
+.on-moist { background: var(--green-soft); border-color: var(--green); color: var(--green); }
+.on-dry { background: var(--due-soft); border-color: var(--due); color: var(--due); }

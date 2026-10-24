@@ -3,7 +3,7 @@ import { notFound, redirect } from 'next/navigation';
 import { currentUserId, userClient } from '@/lib/supabase';
 import { getProfile, latestFlags, PLANT_SELECT, type PlantWithSpecies } from '@/lib/plants';
 import { howToWater, todayIn } from '@/lib/care';
-import { daysAgo, dueLabel, EVENT_LABEL, LIGHT_LABEL, sentence, shortDate } from '@/lib/format';
+import { currentFlag, daysAgo, dueLabel, EVENT_LABEL, LIGHT_LABEL, sentence, shortDate } from '@/lib/format';
 import { signedPhotoUrls } from '@/lib/photos';
 import { FeedbackButtons } from '@/components/FeedbackButtons';
 import { PlantEditor } from '@/components/PlantEditor';
@@ -26,7 +26,7 @@ export default async function PlantPage({ params }: { params: Promise<{ id: stri
   const photos = await signedPhotoUrls([plant.photo_path]);
   const photo = plant.photo_path ? photos[plant.photo_path] : undefined;
   const label = dueLabel(plant.next_due_on, today);
-  const flag = (await latestFlags(db, [plant.id]))[plant.id] ?? null;
+  const flag = currentFlag((await latestFlags(db, [plant.id]))[plant.id] ?? null, label);
 
   const { data: events } = await db
     .from('events')
