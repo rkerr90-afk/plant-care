@@ -149,3 +149,50 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 24px 0; }
 .on-watered { background: var(--green); border-color: var(--green); color: var(--paper); }
 .on-moist { background: var(--green-soft); border-color: var(--green); color: var(--green); }
 .on-dry { background: var(--due-soft); border-color: var(--due); color: var(--due); }
+
+/* ---------- First-open gift ---------- */
+:root { --terracotta: #c4683f; --terracotta-dark: #a8532f; --soil: #4a3426; }
+@media (prefers-color-scheme: dark) { :root { --terracotta: #c97650; --terracotta-dark: #ad6040; --soil: #2e2119; } }
+
+.gift {
+  position: fixed; inset: 0; z-index: 50; background: var(--paper); overflow: hidden;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: calc(env(safe-area-inset-top) + 24px) 24px calc(env(safe-area-inset-bottom) + 24px);
+  text-align: center; transition: opacity 0.45s ease;
+}
+.gift-leaving { opacity: 0; pointer-events: none; }
+
+.gift-stage { position: relative; width: 200px; height: 260px; }
+.gift-stage svg { position: absolute; inset: 0; z-index: 2; }
+.gift-pot { opacity: 0; animation: gift-fade 1.8s ease forwards; }
+.gift-plant { transform-box: view-box; transform-origin: 100px 162px; transform: scale(0); animation: gift-grow 1.2s cubic-bezier(.2,.9,.3,1.2) forwards; animation-delay: 12.3s; }
+
+/* Each emoji falls from above, passes behind the rim and disappears into the pot. */
+.gift-drop {
+  position: absolute; z-index: 1; left: 50%; top: 0; font-size: 60px; line-height: 1;
+  opacity: 0; transform: translate(calc(-50% + var(--x, 0px)), -70vh);
+  animation: gift-fall 1.9s cubic-bezier(.4,0,.7,1) forwards;
+}
+
+.gift-note { min-height: 170px; max-width: 320px; margin-top: 8px; }
+.gift-note > * { opacity: 0; animation: gift-in 0.7s ease forwards; }
+.gift-to { font-family: var(--serif); font-size: 30px; font-weight: 600; margin: 10px 0 8px; animation-delay: 13.6s; }
+.gift-wink { text-wrap: balance; font-family: var(--serif); font-size: 20px; line-height: 1.35; margin: 0 0 24px; animation-delay: 14.4s; }
+.gift-go { animation-delay: 15.4s; padding: 14px 24px; border-radius: 999px; }
+
+@keyframes gift-fade { to { opacity: 1; } }
+@keyframes gift-grow { to { transform: scale(1); } }
+@keyframes gift-fall {
+  0% { opacity: 0; transform: translate(calc(-50% + var(--x, 0px)), -70vh); }
+  12% { opacity: 1; }
+  85% { opacity: 1; }
+  100% { opacity: 0; transform: translate(calc(-50% + var(--x, 0px)), 176px); }
+}
+@keyframes gift-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .gift *, .gift { animation: none !important; transition: none !important; }
+  .gift-pot, .gift-note > * { opacity: 1; }
+  .gift-plant { transform: none; }
+  .gift-drop { display: none; }
+}

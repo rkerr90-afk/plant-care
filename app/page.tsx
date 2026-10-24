@@ -9,15 +9,22 @@ import { signedPhotoUrls } from '@/lib/photos';
 import { FeedbackButtons, WaterAllButton } from '@/components/FeedbackButtons';
 import { NotifyBanner } from '@/components/NotifyBanner';
 import { StatusChip } from '@/components/StatusChip';
+import { Unwrap } from '@/components/Unwrap';
 
 export const dynamic = 'force-dynamic';
 
-export default async function Home() {
+export default async function Home({ searchParams }: { searchParams: Promise<{ gift?: string }> }) {
+  const { gift } = await searchParams;
   const userId = await currentUserId();
   if (!userId) redirect('/login');
   const db = await userClient();
   const profile = await getProfile(db, userId);
   const today = todayIn(profile.timezone);
+  // The first-open gift: only for the account set in GIFT_FOR_EMAIL. Add ?gift=preview to see it yourself.
+  const { data: me } = await db.auth.getUser();
+  const giftFor = (process.env.GIFT_FOR_EMAIL ?? '').trim().toLowerCase();
+  const isHers = !!giftFor && (me.user?.email ?? '').toLowerCase() === giftFor;
+  const preview = gift === 'preview';
 
   const { data } = await db
     .from('plants')
@@ -53,6 +60,7 @@ export default async function Home() {
 
   return (
     <>
+      {(isHers || preview) && <Unwrap preview={preview} />}
       <div className="topbar">
         <h1>Your plants</h1>
         <Link href="/settings" className="button" aria-label="Settings">⚙︎</Link>
