@@ -3,36 +3,28 @@
 import { useState } from 'react';
 import { browserClient } from '@/lib/supabase-browser';
 
-// Sign-in uses a 6-digit email code rather than a magic link: on iPhone a link opens in Safari,
-// not in the home-screen app, so the app would never see the session. A typed code avoids that.
+// Email + password sign-in. Needs "Confirm email" switched off in Supabase
+// (Authentication > Sign In / Providers > Email), so sign-up works with no email at all.
 export default function LoginPage() {
+  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
-  const [code, setCode] = useState('');
-  const [stage, setStage] = useState<'email' | 'code'>('email');
+  const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
-  async function sendCode(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError('');
-    const { error } = await browserClient().auth.signInWithOtp({
-      email: email.trim(),
-      options: { shouldCreateUser: true },
-    });
+    const auth = browserClient().auth;
+    const creds = { email: email.trim(), password };
+    const { data, error } = mode === 'signin' ? await auth.signInWithPassword(creds) : await auth.signUp(creds);
     setBusy(false);
-    if (error) setError(error.message);
-    else setStage('code');
-  }
-
-  async function verify(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setError('');
-    const { error } = await browserClient().auth.verifyOtp({ email: email.trim(), token: code.trim(), type: 'email' });
-    setBusy(false);
-    if (error) setError(error.message);
-    else window.location.href = '/';
+    if (error) return setError(error.message);
+    if (!data.session) {
+      return setError('Account created, but Supabase still wants email confirmation. Turn off "Confirm email" in Supabase, then sign in.');
+    }
+    window.location.href = '/';
   }
 
   return (
@@ -41,50 +33,42 @@ export default function LoginPage() {
       <h1>Plant Care</h1>
       <p className="sub">Photograph your plants. Get one reminder a day for the ones that need you.</p>
 
-      {stage === 'email' ? (
-        <form onSubmit={sendCode}>
-          <label htmlFor="email">Email</label>
-          <input
-            id="email"
-            type="email"
-            inputMode="email"
-            autoComplete="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
-          />
-          <div className="actions">
-            <button className="primary block" disabled={busy || !email}>
-              {busy ? <span className="spinner" /> : 'Send me a code'}
-            </button>
-          </div>
-        </form>
-      ) : (
-        <form onSubmit={verify}>
-          <p style={{ marginTop: 20 }}>We sent a 6-digit code to <strong>{email}</strong>.</p>
-          <label htmlFor="code">Code</label>
-          <input
-            id="code"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            pattern="[0-9]*"
-            maxLength={10}
-            required
-            value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-            placeholder="123456"
-          />
-          <div className="actions">
-            <button className="primary grow" disabled={busy || code.length < 6}>
-              {busy ? <span className="spinner" /> : 'Sign in'}
-            </button>
-            <button type="button" onClick={() => { setStage('email'); setCode(''); }}>
-              Change email
-            </button>
-          </div>
-        </form>
-      )}
+      <form onSubmit={submit}>
+        <label htmlFor="email">Email</label>
+        <input
+          id="email"
+          type="email"
+          inputMode="email"
+          autoComplete="username"
+          required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="you@example.com"
+        />
+        <label htmlFor="password">Password</label>
+        <input
+          id="password"
+          type="password"
+          autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
+          minLength={8}
+          required
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="At least 8 characters"
+        />
+        <div className="actions">
+          <button className="primary block" disabled={busy || !email || password.length < 8}>
+            {busy ? <span className="spinner" /> : mode === 'signin' ? 'Sign in' : 'Create account'}
+          </button>
+        </div>
+      </form>
+
+      <p className="small" style={{ marginTop: 16 }}>
+        {mode === 'signin' ? 'New here? ' : 'Already have an account? '}
+        <a href="#" onClick={(e) => { e.preventDefault(); setError(''); setMode(mode === 'signin' ? 'signup' : 'signin'); }}>
+          {mode === 'signin' ? 'Create an account' : 'Sign in'}
+        </a>
+      </p>
       {error && <p className="error">{error}</p>}
     </div>
   );
