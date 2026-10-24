@@ -12,21 +12,13 @@ export function NotifyBanner() {
     pushState().then(setState).catch(() => setState('unsupported'));
   }, []);
 
-  if (state === null || state === 'on' || state === 'unsupported') return null;
-
-  if (state === 'needs-install') {
-    return (
-      <div className="banner">
-        <strong>Get your daily reminder:</strong> tap the Share button, then <em>Add to Home Screen</em>, and open
-        Plants from your home screen. iPhones only send notifications to installed apps.
-      </div>
-    );
-  }
+  // 'needs-install' shows nothing here: the sign-in page already asks for the home screen first.
+  if (state === null || state === 'on' || state === 'unsupported' || state === 'needs-install') return null;
 
   if (state === 'denied') {
     return (
       <div className="banner">
-        Notifications are blocked. Turn them on in iPhone Settings, Notifications, Plants.
+        Notifications are blocked. Turn them on in iPhone Settings, Notifications, Grow.
       </div>
     );
   }

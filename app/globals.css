@@ -108,7 +108,7 @@ button:disabled { opacity: 0.5; cursor: default; }
 .error { color: var(--due); font-size: 14px; margin-top: 8px; }
 
 label { display: block; font-weight: 600; font-size: 14px; margin: 16px 0 6px; }
-input[type='text'], input[type='email'], input[type='time'], input[type='date'], input:not([type]), select, textarea {
+input[type='text'], input[type='email'], input[type='password'], input[type='time'], input[type='date'], input:not([type]), select, textarea {
   width: 100%; font: 16px var(--sans); padding: 12px; border-radius: 12px;
   border: 1px solid var(--line); background: var(--card); color: var(--ink);
 }
@@ -196,3 +196,17 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 24px 0; }
   .gift-plant { transform: none; }
   .gift-drop { display: none; }
 }
+
+/* Install steps on the first screen: number, picture of what to tap, words */
+.steps { list-style: none; margin: 20px 0 0; padding: 4px 14px; }
+.step { display: grid; grid-template-columns: 22px 48px 1fr; gap: 10px; align-items: center; padding: 14px 0; font-size: 16px; }
+.step + .step { border-top: 1px solid var(--line); }
+.step-n { font-weight: 700; color: var(--quiet); }
+.step-icon {
+  width: 48px; height: 48px; border-radius: 12px; display: grid; place-items: center;
+  background: var(--paper); border: 1px solid var(--line); color: var(--ink);
+}
+.step-hint { display: block; margin-top: 2px; }
+.ios-add { color: #0a84ff; font-weight: 700; font-size: 16px; }
+.step-app { width: 48px; height: 48px; border-radius: 12px; display: block; }
+.step-icon:has(.step-app) { border: 0; background: none; }
