@@ -1,7 +1,7 @@
 {
   "name": "Grow 🍃",
   "short_name": "Grow 🍃",
-  "description": "Identify your plants and get a daily reminder of what needs watering.",
+  "description": "A little app.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

@@ -90,7 +90,7 @@ export default function LoginPage() {
     return (
       <div style={{ paddingTop: '10vh' }}>
         <h1>Grow 🍃</h1>
-        <p className="sub">First, put Grow on your home screen. It then works like an app and can remind you when your plants need water.</p>
+        <p className="sub">First, put Grow on your home screen.</p>
 
         <ol className="steps card">
           <Step n={1} icon={<ShareIcon />}>

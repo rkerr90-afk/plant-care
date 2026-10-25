@@ -4,7 +4,7 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: 'Grow 🍃',
-  description: 'Identify your plants and get a daily reminder of what needs watering.',
+  description: 'A little app.',
   manifest: '/manifest.webmanifest',
   icons: {
     icon: '/icons/favicon-48.png',
