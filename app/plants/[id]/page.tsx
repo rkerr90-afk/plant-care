@@ -2,7 +2,9 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { currentUserId, userClient } from '@/lib/supabase';
 import { getProfile, latestFlags, PLANT_SELECT, type PlantWithSpecies } from '@/lib/plants';
-import { adjustedDue, howToWater, todayIn } from '@/lib/care';
+import { adjustedDue, daysBetween, howToWater, todayIn } from '@/lib/care';
+import type { HealthCase as Case, HealthUpdate } from '@/lib/health';
+import { HealthCase, StartHealthCheck, type CaseView } from '@/components/HealthCheck';
 import { getWeather } from '@/lib/weather';
 import { currentFlag, daysAgo, dueLabel, EVENT_LABEL, LIGHT_LABEL, sentence, shortDate } from '@/lib/format';
 import { signedPhotoUrls } from '@/lib/photos';
@@ -32,6 +34,44 @@ export default async function PlantPage({ params }: { params: Promise<{ id: stri
   const label = dueLabel(adj.date, today);
   const flag = currentFlag((await latestFlags(db, [plant.id]))[plant.id] ?? null, label);
 
+  // Open health case, if any (quietly absent until the health SQL has been run).
+  const { data: caseRow } = await db.from('health_cases').select('*').eq('plant_id', plant.id).eq('status', 'open').maybeSingle();
+  let caseView: CaseView | null = null;
+  if (caseRow) {
+    const c = caseRow as Case;
+    const { data: ups } = await db.from('health_updates').select('*').eq('case_id', c.id).order('created_at');
+    const updates = (ups ?? []) as HealthUpdate[];
+    const urls = await signedPhotoUrls(updates.map((u) => u.photo_path));
+    const last = updates[updates.length - 1];
+    const LABEL: Record<string, string> = { diagnosis: 'found', better: 'better', same: 'same', worse: 'worse', resolved: 'resolved' };
+    const next = c.next_check_on ? dueLabel(c.next_check_on, today) : null;
+    caseView = {
+      id: c.id,
+      issue: c.issue,
+      confidence: c.confidence,
+      signs: c.plan.signs ?? '',
+      explanation: c.plan.explanation ?? '',
+      doNow: c.plan.do_now ?? [],
+      repeat: c.repeat_every_days && c.plan.repeat_action ? `${c.plan.repeat_action}, every ${c.repeat_every_days} days` : null,
+      alsoCouldBe: c.plan.also_could_be ?? '',
+      checkNearby: !!c.plan.check_nearby,
+      wateringChange: c.plan.watering_change ?? 'none',
+      petsNote: profile.has_pets,
+      dayNumber: daysBetween(c.opened_on, today) + 1,
+      nextCheck: next ? { text: next.text, due: next.due } : null,
+      lastOutcome:
+        last && (last.kind === 'better' || last.kind === 'same' || last.kind === 'worse') && !next?.due ? last.kind : null,
+      latest: last ? { kind: last.kind, advice: last.advice ?? '', steps: last.next_steps ?? [] } : null,
+      timeline: updates.map((u) => ({
+        id: u.id,
+        day: daysBetween(c.opened_on, u.created_at.slice(0, 10)) + 1,
+        label: LABEL[u.kind] ?? u.kind,
+        note: u.note,
+        photo: u.photo_path ? urls[u.photo_path] ?? null : null,
+      })),
+    };
+  }
+
   const { data: events } = await db
     .from('events')
     .select('id, kind, detail, created_at')
@@ -57,6 +97,8 @@ export default async function PlantPage({ params }: { params: Promise<{ id: stri
         <div className="how">{sentence(howToWater(sp))} {sentence(sp.soil_check)}</div>
         <FeedbackButtons plantId={plant.id} flag={flag} />
       </div>
+
+      {caseView ? <HealthCase view={caseView} /> : <StartHealthCheck plantId={plant.id} nickname={plant.nickname} />}
 
       {sp.toxic_to_pets && (
         <div className="banner">

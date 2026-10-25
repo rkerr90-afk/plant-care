@@ -25,7 +25,7 @@ export async function POST(req: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const now = new Date();
-  const results: { user: string; due: number; frost: number; sent: number }[] = [];
+  const results: { user: string; due: number; checkIns: number; frost: number; sent: number }[] = [];
 
   for (const p of profiles ?? []) {
     const today = todayIn(p.timezone, now);
@@ -51,6 +51,13 @@ export async function POST(req: Request) {
     const frost = frostDue && weather
       ? plants.filter((x) => frostRisk(x, x.species.profile.min_temp_c, weather.lowTonight))
       : [];
+    // Health check-ins that are due. Missing tables (SQL not run yet) just mean none.
+    const { data: caseRows } = digestDue
+      ? await db.from('health_cases').select('plant_id, issue, opened_on').eq('user_id', p.id).eq('status', 'open').lte('next_check_on', today)
+      : { data: [] as { plant_id: string; issue: string; opened_on: string }[] };
+    const nameOf = Object.fromEntries(plants.map((x) => [x.id, x.nickname]));
+    const checkIns = (caseRows ?? []).filter((c) => nameOf[c.plant_id]);
+
     const leaving =
       digestDue && phase === 'upcoming' && p.away_until
         ? plants.filter((x) => adjustedDue(x, weather, today).date! <= p.away_until).length
@@ -62,6 +69,14 @@ export async function POST(req: Request) {
     if (digestDue && dueRows.length > 0) {
       title = dueRows.length === 1 ? '1 plant to check today' : `${dueRows.length} plants to check today`;
       parts.push(list(dueRows.map((r) => r.plant.nickname)));
+    }
+    if (checkIns.length > 0) {
+      parts.push(
+        'Check-in: ' +
+          checkIns.map((c) => `${nameOf[c.plant_id]} (${c.issue.toLowerCase()}, day ${daysBetween(c.opened_on, today) + 1})`).join(', ') +
+          '.',
+      );
+      if (!title) title = checkIns.length === 1 ? `Check-in: ${nameOf[checkIns[0].plant_id]}` : `${checkIns.length} plant check-ins`;
     }
     if (frost.length > 0) {
       const low = Math.round(weather?.lowTonight ?? 0);
@@ -92,7 +107,7 @@ export async function POST(req: Request) {
         ...(frost.length > 0 ? { last_frost_on: today } : {}),
       })
       .eq('id', p.id);
-    results.push({ user: p.id.slice(0, 8), due: dueRows.length, frost: frost.length, sent });
+    results.push({ user: p.id.slice(0, 8), due: dueRows.length, checkIns: checkIns.length, frost: frost.length, sent });
   }
 
   return NextResponse.json({ ran: now.toISOString(), results });

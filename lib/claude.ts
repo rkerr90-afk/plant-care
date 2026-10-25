@@ -126,3 +126,131 @@ export async function careProfileFor(scientificName: string, commonName: string)
     },
   });
 }
+
+// ---------- Health check ----------
+
+export type Diagnosis = {
+  photo_usable: boolean;
+  retake_hint: string;
+  healthy: boolean;
+  issue: string;
+  category: 'pests' | 'disease' | 'watering' | 'light' | 'nutrition' | 'environment' | 'other';
+  confidence: 'high' | 'medium' | 'low';
+  signs: string;
+  explanation: string;
+  do_now: string[];
+  repeat_action: string;
+  repeat_every_days: number;
+  check_in_days: number;
+  also_could_be: string;
+  watering_change: 'none' | 'water_less' | 'water_more';
+  check_nearby: boolean;
+};
+
+export type ProgressReview = {
+  advice: string;
+  next_steps: string[];
+  escalate: boolean;
+  check_in_days: number;
+};
+
+const HEALTH_SYSTEM =
+  'You are an experienced, practical plant doctor for a UK plant-care app used on a phone. ' +
+  'Diagnose from what is actually visible, using the plant context to weigh causes: overwatering is the most ' +
+  'common cause of houseplant decline, and dry centrally heated air in winter favours spider mites. ' +
+  'Prefer gentle, widely available UK treatments first (rinsing, wiping, insecticidal soap, neem oil, ' +
+  'repotting, moving the plant) and escalate only when needed. If the household has pets, only suggest ' +
+  'treatments that are safe around dogs and cats, and say so. Write short, plain sentences. Never use dashes ' +
+  'as punctuation.';
+
+function img(b64: string): Anthropic.ImageBlockParam {
+  return { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: b64 } };
+}
+
+export async function diagnosePlant(photoBase64: string, context: string, note: string): Promise<Diagnosis> {
+  return structured<Diagnosis>({
+    system: HEALTH_SYSTEM,
+    content: [
+      img(photoBase64),
+      {
+        type: 'text',
+        text:
+          `${context}\n\n` +
+          (note.trim() ? `The owner says: "${note.trim()}"\n\n` : '') +
+          'What is wrong with this plant, if anything, and what should they do?',
+      },
+    ],
+    tool: {
+      name: 'report_diagnosis',
+      description: 'Report the health check.',
+      input_schema: {
+        type: 'object',
+        required: [
+          'photo_usable', 'retake_hint', 'healthy', 'issue', 'category', 'confidence', 'signs', 'explanation',
+          'do_now', 'repeat_action', 'repeat_every_days', 'check_in_days', 'also_could_be', 'watering_change', 'check_nearby',
+        ],
+        properties: {
+          photo_usable: { type: 'boolean', description: 'False if too blurry, dark or far away to judge' },
+          retake_hint: { type: 'string', description: 'If not usable: what photo to take instead. Else empty.' },
+          healthy: { type: 'boolean', description: 'True if nothing meaningful is wrong' },
+          issue: { type: 'string', description: 'Short name of the most likely problem, e.g. "Spider mites". Empty if healthy.' },
+          category: { type: 'string', enum: ['pests', 'disease', 'watering', 'light', 'nutrition', 'environment', 'other'] },
+          confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
+          signs: { type: 'string', description: 'One sentence: what you can see in the photo' },
+          explanation: { type: 'string', description: 'One or two sentences on the likely cause, for this plant and setting' },
+          do_now: { type: 'array', maxItems: 5, items: { type: 'string' }, description: 'Ordered, concrete steps for today' },
+          repeat_action: { type: 'string', description: 'Treatment to repeat, e.g. "Wipe leaves with insecticidal soap". Empty if none.' },
+          repeat_every_days: { type: 'integer', minimum: 0, maximum: 30, description: '0 if nothing to repeat' },
+          check_in_days: { type: 'integer', minimum: 2, maximum: 21, description: 'Days until it is worth checking progress' },
+          also_could_be: { type: 'string', description: 'The main alternative and how to tell. Empty if none.' },
+          watering_change: { type: 'string', enum: ['none', 'water_less', 'water_more'], description: 'Only if watering is a cause' },
+          check_nearby: { type: 'boolean', description: 'True for problems that spread to other plants' },
+        },
+      },
+    },
+  });
+}
+
+export async function reviewProgress(opts: {
+  context: string;
+  issue: string;
+  plan: string;
+  history: string;
+  outcome: 'same' | 'worse';
+  daysOpen: number;
+  note: string;
+  firstPhoto: string | null;
+  newPhoto: string | null;
+}): Promise<ProgressReview> {
+  const content: Anthropic.ContentBlockParam[] = [];
+  if (opts.firstPhoto) content.push({ type: 'text', text: 'Photo when the problem was found:' }, img(opts.firstPhoto));
+  if (opts.newPhoto) content.push({ type: 'text', text: 'Photo today:' }, img(opts.newPhoto));
+  content.push({
+    type: 'text',
+    text:
+      `${opts.context}\n\nProblem: ${opts.issue} (found ${opts.daysOpen} days ago).\nPlan so far: ${opts.plan}\n` +
+      `Check-ins so far: ${opts.history || 'none'}\n` +
+      `Today the owner says it is ${opts.outcome === 'worse' ? 'WORSE' : 'the SAME'}.` +
+      (opts.note.trim() ? ` They add: "${opts.note.trim()}"` : '') +
+      (opts.daysOpen >= 28 ? '\nIt has been four weeks or more: consider firmer measures, or say honestly if the plant may not recover.' : '') +
+      '\n\nWhat should they do next?',
+  });
+  return structured<ProgressReview>({
+    system: HEALTH_SYSTEM,
+    content,
+    tool: {
+      name: 'report_progress',
+      description: 'Advice for the next stage of treatment.',
+      input_schema: {
+        type: 'object',
+        required: ['advice', 'next_steps', 'escalate', 'check_in_days'],
+        properties: {
+          advice: { type: 'string', description: 'Two or three sentences: what the comparison shows and the plan now' },
+          next_steps: { type: 'array', maxItems: 4, items: { type: 'string' } },
+          escalate: { type: 'boolean', description: 'True if moving to a stronger treatment' },
+          check_in_days: { type: 'integer', minimum: 1, maximum: 14 },
+        },
+      },
+    },
+  });
+}

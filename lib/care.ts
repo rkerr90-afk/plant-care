@@ -193,6 +193,53 @@ export function riskScore(nextDue: string | null, intervalDays: number, today: s
   return daysBetween(nextDue, today) / Math.max(1, intervalDays);
 }
 
+// ---------- Health check ----------
+
+export type WateringChange = 'none' | 'water_less' | 'water_more';
+
+/**
+ * A diagnosis can say the watering itself is the problem.
+ * - water_less (root rot, soggy soil): stretch the interval by a fifth and wait at least 3 days.
+ * - water_more (crispy, drooping from thirst): shorten it a little and check the soil today.
+ */
+export function applyWateringChange(
+  change: WateringChange,
+  factor: number,
+  nextDue: string | null,
+  today: string,
+): { feedback_factor: number; next_due_on: string | null } {
+  if (change === 'water_less') {
+    const wait = addDays(today, 3);
+    return { feedback_factor: clamp(round2(factor * 1.2), FEEDBACK_MIN, FEEDBACK_MAX), next_due_on: !nextDue || nextDue < wait ? wait : nextDue };
+  }
+  if (change === 'water_more') {
+    return { feedback_factor: clamp(round2(factor * 0.85), FEEDBACK_MIN, FEEDBACK_MAX), next_due_on: today };
+  }
+  return { feedback_factor: factor, next_due_on: nextDue };
+}
+
+export type CheckInOutcome = 'better' | 'same' | 'worse' | 'resolved';
+
+/**
+ * When to look again after a check-in. Follows the treatment rhythm when there is one.
+ * Better: relax to a week or the repeat gap. Same: the repeat gap. Worse: sooner, within 3 days.
+ */
+export function nextCheckDate(outcome: CheckInOutcome, repeatEveryDays: number | null, today: string, suggestedDays?: number): string | null {
+  if (outcome === 'resolved') return null;
+  const repeat = repeatEveryDays && repeatEveryDays > 0 ? repeatEveryDays : null;
+  let days: number;
+  if (outcome === 'better') days = Math.max(repeat ?? 7, 7);
+  else if (outcome === 'same') days = repeat ?? 5;
+  else days = Math.min(repeat ?? 3, 3);
+  if (suggestedDays && suggestedDays > 0 && outcome !== 'better') days = Math.min(days, Math.round(suggestedDays));
+  return addDays(today, clamp(days, 1, 21));
+}
+
+/** Four weeks without a fix: time to suggest something firmer. */
+export function caseIsLong(openedOn: string, today: string): boolean {
+  return daysBetween(openedOn, today) >= 28;
+}
+
 /** Today's date (YYYY-MM-DD) in a given IANA time zone. */
 export function todayIn(timeZone: string, now: Date = new Date()): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);

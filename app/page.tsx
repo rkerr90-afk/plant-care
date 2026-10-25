@@ -5,6 +5,7 @@ import { contextOf, getProfile, latestFlags, PLANT_SELECT, type PlantWithSpecies
 import { adjustedDue, awayPhase, frostRisk, howToWater, riskScore, todayIn, wateringInterval, type Flag } from '@/lib/care';
 import { currentFlag, dueLabel, sentence, shortDate } from '@/lib/format';
 import { getWeather } from '@/lib/weather';
+import { openCases, type HealthCase } from '@/lib/health';
 import { signedPhotoUrls } from '@/lib/photos';
 import { FeedbackButtons, WaterAllButton } from '@/components/FeedbackButtons';
 import { NotifyBanner } from '@/components/NotifyBanner';
@@ -40,8 +41,11 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ g
   const rows = plants
     .map((p) => ({ plant: p, ...adjustedDue(p, weather, today) }))
     .sort((a, b) => (a.date ?? '9999').localeCompare(b.date ?? '9999'));
-  const due = rows.filter((r) => r.date && r.date <= today);
-  const later = rows.filter((r) => !(r.date && r.date <= today));
+  const cases = await openCases(db);
+  const waterDue = (r: { date: string | null }) => !!r.date && r.date <= today;
+  const checkDue = (id: string) => !!cases[id]?.next_check_on && cases[id].next_check_on! <= today;
+  const due = rows.filter((r) => waterDue(r) || checkDue(r.plant.id));
+  const later = rows.filter((r) => !(waterDue(r) || checkDue(r.plant.id)));
 
   const frost = weather
     ? plants.filter((p) => frostRisk(p, p.species.profile.min_temp_c, weather.lowTonight))
@@ -53,8 +57,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ g
   const catchUp =
     phase === 'returned'
       ? rows
-          .filter((r) => r.date && r.date < today)
-          .map((r) => ({ ...r, risk: riskScore(r.date, wateringInterval(r.plant.species.profile, contextOf(r.plant), today), today) }))
+          .filter((r) => (r.date && r.date < today) || cases[r.plant.id])
+          // Plants under treatment go first, then the thirstiest.
+          .map((r) => ({ ...r, risk: (cases[r.plant.id] ? 100 : 0) + riskScore(r.date, wateringInterval(r.plant.species.profile, contextOf(r.plant), today), today) }))
           .sort((a, b) => b.risk - a.risk)
       : [];
 
@@ -125,7 +130,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ g
             {catchUp.map((r) => (
               <li key={r.plant.id}>
                 <span>{r.plant.nickname}</span>
-                <span>{dueLabel(r.date, today).text}</span>
+                <span>{cases[r.plant.id] ? `Treating: ${cases[r.plant.id].issue}` : dueLabel(r.date, today).text}</span>
               </li>
             ))}
           </ul>
@@ -148,10 +153,10 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ g
         <>
           <div className="topbar" style={{ marginTop: 20 }}>
             <h2 style={{ margin: 0 }}>Today</h2>
-            {due.length > 1 && <WaterAllButton ids={due.map((r) => r.plant.id)} />}
+            {due.filter(waterDue).length > 1 && <WaterAllButton ids={due.filter(waterDue).map((r) => r.plant.id)} />}
           </div>
           {due.map((r) => (
-            <PlantCard key={r.plant.id} plant={r.plant} due={r.date} note={r.note} today={today} photo={photos[r.plant.photo_path ?? '']} pets={profile.has_pets} flag={flags[r.plant.id] ?? null} showActions />
+            <PlantCard key={r.plant.id} plant={r.plant} due={r.date} note={r.note} today={today} photo={photos[r.plant.photo_path ?? '']} pets={profile.has_pets} flag={flags[r.plant.id] ?? null} healthCase={cases[r.plant.id]} showActions={waterDue(r)} />
           ))}
         </>
       )}
@@ -160,7 +165,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ g
         <>
           <h2>Coming up</h2>
           {later.map((r) => (
-            <PlantCard key={r.plant.id} plant={r.plant} due={r.date} note={r.note} today={today} photo={photos[r.plant.photo_path ?? '']} pets={profile.has_pets} flag={flags[r.plant.id] ?? null} />
+            <PlantCard key={r.plant.id} plant={r.plant} due={r.date} note={r.note} today={today} photo={photos[r.plant.photo_path ?? '']} pets={profile.has_pets} flag={flags[r.plant.id] ?? null} healthCase={cases[r.plant.id]} />
           ))}
         </>
       )}
@@ -178,6 +183,7 @@ function PlantCard({
   photo,
   pets,
   flag,
+  healthCase,
   showActions = false,
 }: {
   plant: PlantWithSpecies;
@@ -187,8 +193,10 @@ function PlantCard({
   photo?: string;
   pets: boolean;
   flag: Flag;
+  healthCase?: HealthCase;
   showActions?: boolean;
 }) {
+  const checkIn = healthCase?.next_check_on && healthCase.next_check_on <= today;
   const label = dueLabel(due, today);
   const shown = currentFlag(flag, label);
   const profile = plant.species.profile;
@@ -206,8 +214,10 @@ function PlantCard({
             <StatusChip flag={shown} label={label} />
             {pets && profile.toxic_to_pets && <span className="chip warn">Toxic to pets</span>}
             {plant.needs_context && <span className="chip warn">Finish setup</span>}
+            {healthCase && <span className="chip due">Treating: {healthCase.issue}</span>}
           </div>
           {note && <div className="small" style={{ marginTop: 4 }}>{note}</div>}
+          {checkIn && <div className="small" style={{ marginTop: 4 }}>Check-in due: tap to log how it’s doing.</div>}
           {showActions && <div className="how">{sentence(howToWater(profile))} {sentence(profile.soil_check)}</div>}
         </div>
       </Link>

@@ -2,7 +2,8 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { identifyPlant, type Identification } from '@/lib/claude';
+import { diagnosePlant, identifyPlant, reviewProgress, type Identification } from '@/lib/claude';
+import { loadPhotoBase64, planText, plantContextText, saveHealthPhoto, type HealthCase } from '@/lib/health';
 import {
   applyFeedback,
   firstDueDate,
@@ -10,6 +11,10 @@ import {
   wateringInterval,
   addDays,
   resetSchedule,
+  applyWateringChange,
+  nextCheckDate,
+  daysBetween,
+  type CheckInOutcome,
   type Feedback,
   type LastWatered,
   type PlantContext,
@@ -357,10 +362,182 @@ export async function deletePlantAction(plantId: string): Promise<Result<null>> 
     const userId = await requireUser();
     const db = await userClient();
     const { data } = await db.from('plants').select('photo_path').eq('id', plantId).single();
-    if (data?.photo_path) await adminClient().storage.from(PHOTO_BUCKET).remove([data.photo_path]);
+    const { data: hp } = await db.from('health_updates').select('photo_path').eq('plant_id', plantId);
+    const paths = [data?.photo_path, ...(hp ?? []).map((u) => u.photo_path)].filter((p): p is string => !!p);
+    if (paths.length) await adminClient().storage.from(PHOTO_BUCKET).remove(paths);
     await db.from('plants').delete().eq('id', plantId).eq('user_id', userId);
     revalidatePath('/');
     return { ok: true, data: null };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+// ---------- Health check ----------
+
+export type DiagnoseResult =
+  | { kind: 'retake'; message: string }
+  | { kind: 'healthy'; message: string }
+  | { kind: 'case'; caseId: string };
+
+/** Photo of a problem in, diagnosis and treatment plan out. Opens a case unless the plant looks healthy. */
+export async function diagnoseAction(plantId: string, photoBase64: string, note: string): Promise<Result<DiagnoseResult>> {
+  try {
+    const userId = await requireUser();
+    const db = await userClient();
+    const profile = await getProfile(db, userId);
+    const today = todayIn(profile.timezone);
+    const plant = await loadPlant(plantId);
+    const { data: existing } = await db.from('health_cases').select('id').eq('plant_id', plantId).eq('status', 'open').maybeSingle();
+    if (existing) throw new Error('This plant already has an open check. Log a check-in instead.');
+
+    await chargeAiCall(userId);
+    const photo = stripDataUrl(photoBase64);
+    const context = await plantContextText(db, plant, profile.has_pets, today);
+    const d = await diagnosePlant(photo, context, note);
+
+    if (!d.photo_usable) {
+      return { ok: true, data: { kind: 'retake', message: d.retake_hint || 'That photo is hard to judge. Try a closer, brighter shot of the affected leaves.' } };
+    }
+    if (d.healthy || !d.issue.trim()) {
+      await db.from('events').insert({ plant_id: plantId, user_id: userId, kind: 'note', detail: 'Health check: looks healthy' });
+      revalidatePath(`/plants/${plantId}`);
+      return { ok: true, data: { kind: 'healthy', message: [d.signs, d.explanation].filter(Boolean).join(' ') } };
+    }
+
+    const repeat = d.repeat_every_days > 0 && d.repeat_action.trim() ? d.repeat_every_days : null;
+    const { data: created, error } = await db
+      .from('health_cases')
+      .insert({
+        user_id: userId,
+        plant_id: plantId,
+        issue: d.issue.trim(),
+        category: d.category,
+        confidence: d.confidence,
+        plan: d,
+        repeat_every_days: repeat,
+        next_check_on: addDays(today, Math.max(2, Math.min(21, d.check_in_days || repeat || 5))),
+        opened_on: today,
+      })
+      .select('id')
+      .single();
+    if (error || !created) throw new Error(error?.message ?? 'Could not save the check');
+
+    const photo_path = await saveHealthPhoto(userId, plantId, photo);
+    await db.from('health_updates').insert({
+      case_id: created.id,
+      user_id: userId,
+      plant_id: plantId,
+      kind: 'diagnosis',
+      note: note.trim() || null,
+      photo_path,
+      advice: d.explanation,
+      next_steps: d.do_now,
+    });
+
+    if (d.watering_change !== 'none') {
+      const w = applyWateringChange(d.watering_change, Number(plant.feedback_factor), plant.next_due_on, today);
+      await db.from('plants').update(w).eq('id', plantId);
+    }
+    await db.from('events').insert({ plant_id: plantId, user_id: userId, kind: 'note', detail: `Health: ${d.issue.trim()} found` });
+    revalidatePath('/');
+    revalidatePath(`/plants/${plantId}`);
+    return { ok: true, data: { kind: 'case', caseId: created.id } };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+export type CheckInResult = { advice: string; next_steps: string[]; next_check_on: string | null; escalate: boolean };
+
+/** Better, same, worse or resolved, with an optional new photo. Same and worse get fresh advice from Claude. */
+export async function checkInAction(
+  caseId: string,
+  outcome: CheckInOutcome,
+  photoBase64: string | null,
+  note: string,
+): Promise<Result<CheckInResult>> {
+  try {
+    const userId = await requireUser();
+    const db = await userClient();
+    const profile = await getProfile(db, userId);
+    const today = todayIn(profile.timezone);
+    const { data: c } = await db.from('health_cases').select('*').eq('id', caseId).single();
+    if (!c) throw new Error('Check not found');
+    const hc = c as HealthCase;
+    if (hc.status !== 'open') throw new Error('This check is already closed');
+    const plant = await loadPlant(hc.plant_id);
+    const photo = photoBase64 ? stripDataUrl(photoBase64) : null;
+    const daysOpen = daysBetween(hc.opened_on, today);
+
+    let result: CheckInResult;
+    if (outcome === 'resolved') {
+      result = { advice: 'Lovely. The check is closed and stays in the history.', next_steps: [], next_check_on: null, escalate: false };
+    } else if (outcome === 'better') {
+      const next = nextCheckDate('better', hc.repeat_every_days, today);
+      const steps = hc.plan.repeat_action && hc.repeat_every_days ? [`${hc.plan.repeat_action}, every ${hc.repeat_every_days} days`] : [];
+      result = {
+        advice: 'Good news. Keep going with the same treatment until it is fully clear. Problems like this often look better before they are gone.',
+        next_steps: steps,
+        next_check_on: next,
+        escalate: false,
+      };
+    } else {
+      await chargeAiCall(userId);
+      const { data: ups } = await db
+        .from('health_updates')
+        .select('kind, note, created_at, photo_path')
+        .eq('case_id', caseId)
+        .order('created_at');
+      const first = (ups ?? []).find((u) => u.kind === 'diagnosis');
+      const history = (ups ?? [])
+        .filter((u) => u.kind !== 'diagnosis')
+        .map((u) => `day ${daysBetween(hc.opened_on, u.created_at.slice(0, 10))}: ${u.kind}${u.note ? ` (${u.note})` : ''}`)
+        .join('; ');
+      const r = await reviewProgress({
+        context: await plantContextText(db, plant, profile.has_pets, today),
+        issue: hc.issue,
+        plan: planText(hc),
+        history,
+        outcome,
+        daysOpen,
+        note,
+        firstPhoto: await loadPhotoBase64(first?.photo_path ?? null),
+        newPhoto: photo,
+      });
+      result = {
+        advice: r.advice,
+        next_steps: r.next_steps,
+        next_check_on: nextCheckDate(outcome, hc.repeat_every_days, today, r.check_in_days),
+        escalate: r.escalate,
+      };
+    }
+
+    const photo_path = photo ? await saveHealthPhoto(userId, hc.plant_id, photo) : null;
+    await db.from('health_updates').insert({
+      case_id: caseId,
+      user_id: userId,
+      plant_id: hc.plant_id,
+      kind: outcome,
+      note: note.trim() || null,
+      photo_path,
+      advice: result.advice,
+      next_steps: result.next_steps,
+    });
+    await db
+      .from('health_cases')
+      .update(
+        outcome === 'resolved'
+          ? { status: 'resolved', resolved_on: today, next_check_on: null }
+          : { next_check_on: result.next_check_on },
+      )
+      .eq('id', caseId);
+    if (outcome === 'resolved') {
+      await db.from('events').insert({ plant_id: hc.plant_id, user_id: userId, kind: 'note', detail: `Health: ${hc.issue} resolved after ${daysOpen} days` });
+    }
+    revalidatePath('/');
+    revalidatePath(`/plants/${hc.plant_id}`);
+    return { ok: true, data: result };
   } catch (err) {
     return fail(err);
   }

@@ -193,3 +193,35 @@ test('parses an Open-Meteo response and finds tonight\'s low', () => {
   assert.equal(w?.days[1].rain_mm, 0);
   assert.equal(parseWeather({}, '2026-10-24'), null);
 });
+
+// ---------- Health check ----------
+import { applyWateringChange, caseIsLong, nextCheckDate } from './care.ts';
+
+test('a watering diagnosis adjusts the schedule', () => {
+  const less = applyWateringChange('water_less', 1, '2026-10-26', '2026-10-25');
+  assert.equal(less.feedback_factor, 1.2);
+  assert.equal(less.next_due_on, '2026-10-28');
+  assert.equal(applyWateringChange('water_less', 1, '2026-11-05', '2026-10-25').next_due_on, '2026-11-05');
+  const more = applyWateringChange('water_more', 1, '2026-11-05', '2026-10-25');
+  assert.equal(more.feedback_factor, 0.85);
+  assert.equal(more.next_due_on, '2026-10-25');
+  assert.deepEqual(applyWateringChange('none', 1.1, '2026-11-05', '2026-10-25'), { feedback_factor: 1.1, next_due_on: '2026-11-05' });
+  assert.equal(applyWateringChange('water_less', 1.9, null, '2026-10-25').feedback_factor, 2);
+});
+
+test('check-ins follow the treatment rhythm', () => {
+  const t = '2026-10-25';
+  assert.equal(nextCheckDate('resolved', 6, t), null);
+  assert.equal(nextCheckDate('better', 6, t), '2026-11-01');
+  assert.equal(nextCheckDate('better', 10, t), '2026-11-04');
+  assert.equal(nextCheckDate('same', 6, t), '2026-10-31');
+  assert.equal(nextCheckDate('same', null, t), '2026-10-30');
+  assert.equal(nextCheckDate('worse', 6, t), '2026-10-28');
+  assert.equal(nextCheckDate('worse', 2, t), '2026-10-27');
+  assert.equal(nextCheckDate('same', 6, t, 2), '2026-10-27');
+});
+
+test('a case is long after four weeks', () => {
+  assert.equal(caseIsLong('2026-10-01', '2026-10-28'), false);
+  assert.equal(caseIsLong('2026-10-01', '2026-10-29'), true);
+});
