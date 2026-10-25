@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { adminClient, currentUserId, userClient } from '@/lib/supabase';
+import { currentUserId, userClient } from '@/lib/supabase';
 import { contextOf, getProfile, latestFlags, PLANT_SELECT, type PlantWithSpecies } from '@/lib/plants';
 import { adjustedDue, awayPhase, frostRisk, howToWater, riskScore, todayIn, wateringInterval, type Flag } from '@/lib/care';
 import { currentFlag, dueLabel, sentence, shortDate } from '@/lib/format';
@@ -21,12 +21,10 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ g
   const db = await userClient();
   const profile = await getProfile(db, userId);
   const today = todayIn(profile.timezone);
-  // The first-open gift: every new account (made in the last 14 days) except the owner's, which is the
-  // first account ever created. It shows once per device. Add ?gift=preview to see it yourself.
+  // The first-open gift: only for this account, once per device. Add ?gift=preview to see it yourself.
+  const GIFT_FOR = 'info@somatree.com';
   const { data: me } = await db.auth.getUser();
-  const { data: owner } = await adminClient().from('profiles').select('id').order('created_at').limit(1).maybeSingle();
-  const createdAt = me.user?.created_at ? Date.parse(me.user.created_at) : 0;
-  const isHers = owner?.id !== userId && Date.now() - createdAt < 14 * 864e5;
+  const isHers = (me.user?.email ?? '').trim().toLowerCase() === GIFT_FOR;
   const preview = gift === 'preview';
 
   const { data } = await db
